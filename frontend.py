@@ -1,7 +1,8 @@
 import streamlit as st
 from backend_code.backend    import thread_id , workflow
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage , AIMessage
 from backend_code.cmdlogic   import handle_local_commands
+import uuid ##used to generate the thread_id 
 
 st.markdown(
     """
@@ -20,19 +21,87 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+###############  utility Functionss ###############
+def generate_thread_id():
+    thread_id = uuid.uuid4()
+    return thread_id
 
-# Store message history
+def reset_chat():
+    thread_id = generate_thread_id()
+    st.session_state['thread_id'] = thread_id
+    add_thread(st.session_state['thread_id'])
+    st.session_state['message_history'] = []
+
+def add_thread(thread_id):
+    if thread_id not in st.session_state['chat_threads']:
+        st.session_state['chat_threads'].append(thread_id)
+
+def chat_within_thread_id(thread_id):
+    # print("--------------->>>>>>>>>>>>>>" , thread_id)
+    state = workflow.get_state(config = {"configurable": {"thread_id": thread_id}}) #.values['messages'] 
+    # print("State Values",state.values.get("messages"))
+    return state.values.get("messages")
+######################################## Session State Code ##############################################
 if 'message_history' not in st.session_state:
     st.session_state['message_history'] = []
 
-# Store Agent Mode state
+if "thread_id" not in st.session_state :
+    st.session_state['thread_id'] = generate_thread_id()
+
+if 'chat_threads' not in st.session_state:
+    st.session_state['chat_threads'] = []
+
+add_thread(st.session_state['thread_id'])
+
+######################################## Agent Mode Code ##############################################
 if 'agent_mode' not in st.session_state:
     st.session_state['agent_mode'] = False
 
-# Display chat history
+
+######################################## Side-Bar Code #################################################
+st.sidebar.title("Lang Graph ChatBot")
+if st.sidebar.button("New Chat"):
+    reset_chat()
+st.sidebar.header("Your History")
+
+for thread_id in st.session_state['chat_threads']:
+    
+    load_chat = chat_within_thread_id(thread_id)
+
+    if load_chat :
+        displsy_title = load_chat[0].content[:10]
+    else :
+        displsy_title = "empty chat"
+
+    # print("Thread_idd", thread_id)
+    if st.sidebar.button(displsy_title):
+        st.session_state['thread_id'] = thread_id
+        # print("after click thread_id --->>" ,  )
+        
+        ##convert into compatiblity
+        temp_messages = []
+        # print("------------>>>>>>>>>>>>>",load_chat)
+        for messag in load_chat:
+            if isinstance(messag , HumanMessage):
+                role = "user"
+            elif isinstance(messag , AIMessage ):
+                role = "assistant"
+            else:
+                role = []
+
+            temp_messages.append({
+                'role' : role,
+                'content' : messag.content
+            })
+
+        st.session_state['message_history'] = temp_messages
+    
+######################################## Display the chat-history ##############################################
 for message in st.session_state['message_history']:
     with st.chat_message(message['role']):
         st.markdown(message['content'])
+ 
+
 
 user_input = st.chat_input('Type here')
 
@@ -93,24 +162,9 @@ if user_input:
             st.markdown(ai_message)
         st.stop()
 
-    # # --- Normal AI response ---
-    # config = {"configurable": {"thread_id": thread_id}}
-    # try:
-    #     response = workflow.invoke({'messages': [HumanMessage(content=user_input)]}, config=config)
-    #     # print(response)
-    # except:
-    #     raise Exception("No Connections Or API error")
-    # # ##for the streaming
-    # ai_message = response['messages'][-1].content
-
-    # st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
-
-    # with st.chat_message('assistant'):
-    #     st.markdown(ai_message)
-
     ##streamiing 
-    # --- Normal AI response (with streaming) ---
-    config = {"configurable": {"thread_id": thread_id}}
+    # ---  AI response (with streaming) ---
+    config = {"configurable": {"thread_id": st.session_state['thread_id']}}
 
     try: 
         # Stream response instead of full invoke
@@ -155,3 +209,43 @@ if user_input:
 
 
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    # # --- Normal AI response ---
+    # config = {"configurable": {"thread_id": thread_id}}
+    # try:
+    #     response = workflow.invoke({'messages': [HumanMessage(content=user_input)]}, config=config)
+    #     # print(response)
+    # except:
+    #     raise Exception("No Connections Or API error")
+    # # ##for the streaming
+    # ai_message = response['messages'][-1].content
+
+    # st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
+
+    # with st.chat_message('assistant'):
+    #     st.markdown(ai_message)

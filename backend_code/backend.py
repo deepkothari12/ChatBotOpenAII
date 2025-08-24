@@ -27,6 +27,7 @@ def gpt_models(messages_list, prompt=None):
     )
     
     api_messages = []
+    
     if prompt:
         api_messages.append({"role": "system", "content": prompt})
     
@@ -39,7 +40,7 @@ def gpt_models(messages_list, prompt=None):
         # stream=True,
         # stream_options=True
     )
-    print(completion)
+    # print(completion)
     return completion.choices[0].message.content
 
 
@@ -80,14 +81,16 @@ workflow = graph.compile(checkpointer=checkpointer)
 #         print("Nexi: Bye! Nice chatting with you!")
 #         break
 
-#     # config = {
-#     #     "configurable": {
-#     #         "thread_id": thread_id
-#     #     }
-#     # }
+#     config = {
+#         "configurable": {
+#             "thread_id": thread_id
+#         }
+#     }
 
 #     response = workflow.invoke({
 #         "messages": HumanMessage(content=user_input)
-#     }, )
+#     }, config=config)
 
 #     print("Nexi:", response["messages"][-1].content)
+
+# print(workflow.get_state(config=config).values['messages'])
