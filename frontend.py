@@ -1,8 +1,9 @@
-import streamlit as st
-from backend_code.backend    import thread_id , workflow
+import streamlit             as st
+from backend_code.backend    import  workflow , find_all_thread
 from langchain_core.messages import HumanMessage , AIMessage
 from backend_code.cmdlogic   import handle_local_commands
 import uuid ##used to generate the thread_id 
+
 
 st.markdown(
     """
@@ -10,10 +11,16 @@ st.markdown(
     .custom-footer {
         text-align: center;
         font-size: 14px;
-        color: #999;z
+        color: #999;
         margin-top: 10px;
         margin-bottom: -10px; /* Slightly push toward the chat box */
     }
+    div[data-testid="stSidebar"] button {
+        width: 50% !important;
+        text-align: left; 
+        
+        }
+
     </style>
     <div class="custom-footer">
         ☻ To enable Agent Mode, type <b>Nexi Agent On</b>.
@@ -41,7 +48,9 @@ def chat_within_thread_id(thread_id):
     state = workflow.get_state(config = {"configurable": {"thread_id": thread_id}}) #.values['messages'] 
     # print("State Values",state.values.get("messages"))
     return state.values.get("messages")
+
 ######################################## Session State Code ##############################################
+
 if 'message_history' not in st.session_state:
     st.session_state['message_history'] = []
 
@@ -49,11 +58,11 @@ if "thread_id" not in st.session_state :
     st.session_state['thread_id'] = generate_thread_id()
 
 if 'chat_threads' not in st.session_state:
-    st.session_state['chat_threads'] = []
-
+    st.session_state['chat_threads'] = find_all_thread()
+    
 add_thread(st.session_state['thread_id'])
 
-######################################## Agent Mode Code ##############################################
+######################################## Agent Mode Code ###############################################
 if 'agent_mode' not in st.session_state:
     st.session_state['agent_mode'] = False
 
@@ -69,12 +78,12 @@ for thread_id in st.session_state['chat_threads']:
     load_chat = chat_within_thread_id(thread_id)
 
     if load_chat :
-        displsy_title = load_chat[0].content[:10]
+        displsy_title = load_chat[0].content[:20]
     else :
-        displsy_title = "empty chat"
+        displsy_title = "empty chat" 
 
     # print("Thread_idd", thread_id)
-    if st.sidebar.button(displsy_title):
+    if st.sidebar.button(displsy_title ,  key=f"btn-{thread_id}"):
         st.session_state['thread_id'] = thread_id
         # print("after click thread_id --->>" ,  )
         
@@ -86,8 +95,8 @@ for thread_id in st.session_state['chat_threads']:
                 role = "user"
             elif isinstance(messag , AIMessage ):
                 role = "assistant"
-            else:
-                role = []
+            # else:
+            #     role = []
 
             temp_messages.append({
                 'role' : role,
@@ -105,11 +114,12 @@ for message in st.session_state['message_history']:
 
 user_input = st.chat_input('Type here')
 
-agent_cmd = {"agent_mode_on": [
+agent_cmd = {
+    "agent_mode_on": [
         "nexi agent on",
         "nexi agent on."
         "agent mode on",
-        "agent On"
+        "agent On",
         "turn agent mode on",
         "enable agent mode",
         "activate agent mode",
@@ -120,13 +130,14 @@ agent_cmd = {"agent_mode_on": [
         "nexi agent off",
         "nexi agent off."
         "agent mode off",
-        "agent On"
+        "agent Off",
         "turn agent mode off",
         "disable agent mode",
         "deactivate agent mode",
-        "stop agent mode"
+        "stop agent mode",
         "no agent"
-    ]}
+    ]
+    }
 
 if user_input:
     user_text = user_input.strip().lower()
@@ -138,10 +149,11 @@ if user_input:
         st.text(user_input)
 
     
-    if user_text in agent_cmd['agent_mode_on'] : # == "agent mode on":
+    if user_text in agent_cmd['agent_mode_on'] : 
         st.session_state['agent_mode'] = True
         ai_message = "✅ Agent Mode is now **ON**. I can execute commands."
         st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
+
         with st.chat_message('assistant'):
             st.markdown(ai_message)
         st.stop()

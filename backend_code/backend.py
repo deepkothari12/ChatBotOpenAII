@@ -3,18 +3,19 @@ from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langgraph.graph import add_messages
 from langgraph.checkpoint.memory import MemorySaver , InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver 
 from openai import OpenAI
 import os
-import requests
-import json
 from dotenv import load_dotenv
-from backend_code.cmdlogic import handle_local_commands
+# from cmdlogic import handle_local_commands
+import sqlite3
+
 
 load_dotenv()
 HF_TOKEN = os.getenv('HF_TOKEN')
+         
 
-
-thread_id = "1"
+# thread_id = "1"
 
 # print(HF_TOKEN)
 class ChatState(TypedDict):
@@ -40,7 +41,7 @@ def gpt_models(messages_list, prompt=None):
         # stream=True,
         # stream_options=True
     )
-    # print(completion)
+    # print("-->",completion)
     return completion.choices[0].message.content
 
 
@@ -55,9 +56,10 @@ def Chat_Node(state: ChatState):
                 "role": role,
                 "content": msg.content
             })
+            
     # print("--------->>>>" , formatted_messages)
     prompt = "You are a helpful AI assistant. Try to remember what the user said earlier and maintain context throughout the conversation."
-
+    
     ai_response = gpt_models(formatted_messages, prompt)
     # print("----------->>>>>>>>",ai_response)
     return  {"messages": [AIMessage(content=ai_response)]}
@@ -68,8 +70,24 @@ graph.add_edge(START, "Chat_Node")
 graph.add_edge("Chat_Node", END)
 
 
-checkpointer = InMemorySaver()  
+##Create Data Base
+connections = sqlite3.connect(
+    database="ChatBotData.db",
+    check_same_thread=False
+)
+
+# checkpointer = InMemorySaver()
+checkpointer = SqliteSaver(conn = connections) 
 workflow = graph.compile(checkpointer=checkpointer)
+
+#### Find how many thread are exitss
+def find_all_thread():
+    all_thread_id = set()
+
+    for checkpoint in checkpointer.list(config = None):
+        all_thread_id.add(checkpoint.config['configurable']['thread_id'])
+
+    return list(all_thread_id)
 
 
 # thread_id = "11"
