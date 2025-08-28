@@ -14,7 +14,10 @@ import sqlite3
 
 load_dotenv()
 # HF_TOKEN = os.getenv('HF_TOKEN')
-HF_TOKEN = st.secrets["HF_TOKEN"]
+if "HF_TOKEN" in st.secrets:
+    HF_TOKEN = st.secrets["HF_TOKEN"]
+else :
+    HF_TOKEN = os.getenv("HF_TOKEN")
          
 
 # thread_id = "1"
