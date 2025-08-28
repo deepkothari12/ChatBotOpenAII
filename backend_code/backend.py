@@ -5,6 +5,7 @@ from langgraph.graph import add_messages
 from langgraph.checkpoint.memory import MemorySaver , InMemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver 
 from openai import OpenAI
+import streamlit as st
 import os
 from dotenv import load_dotenv
 # from cmdlogic import handle_local_commands
@@ -12,7 +13,8 @@ import sqlite3
 
 
 load_dotenv()
-HF_TOKEN = os.getenv('HF_TOKEN')
+# HF_TOKEN = os.getenv('HF_TOKEN')
+HF_TOKEN = st.secrets["HF_TOKEN"]
          
 
 # thread_id = "1"
