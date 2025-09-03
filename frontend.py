@@ -1,263 +1,110 @@
-import streamlit             as st
-from backend_code.backend    import  workflow , find_all_thread
-from langchain_core.messages import HumanMessage , AIMessage
-from backend_code.cmdlogic   import handle_local_commands
-import uuid ##used to generate the thread_id 
+import streamlit as st
+from backend_code.backend import workflow, find_all_thread, gpt_models_streaming
+from langchain_core.messages import HumanMessage, AIMessage
+import uuid
 
-
-st.markdown(
-    """
-    <style>
-    .custom-footer {
-        text-align: center;
-        font-size: 14px;
-        color: #999;
-        margin-top: 10px;
-        margin-bottom: -10px; /* Slightly push toward the chat box */
-    }
-    div[data-testid="stSidebar"] button {
-        width: 50% !important;
-        text-align: left; 
-        
-        }
-
-    </style>
-    <div class="custom-footer">
-        ☻ To enable Agent Mode, type <b>Nexi Agent On</b>.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-###############  utility Functionss ###############
+############### Utility Functions ###############
 def generate_thread_id():
-    thread_id = uuid.uuid4()
-    return thread_id
-
-def reset_chat():
-    thread_id = generate_thread_id()
-    st.session_state['thread_id'] = thread_id
-    add_thread(st.session_state['thread_id'])
-    st.session_state['message_history'] = []
+    return str(uuid.uuid4())
 
 def add_thread(thread_id):
     if thread_id not in st.session_state['chat_threads']:
         st.session_state['chat_threads'].append(thread_id)
 
-def chat_within_thread_id(thread_id):
-    # print("--------------->>>>>>>>>>>>>>" , thread_id)
-    state = workflow.get_state(config = {"configurable": {"thread_id": thread_id}}) #.values['messages'] 
-    # print("State Values",state.values.get("messages"))
-    return state.values.get("messages")
-
-######################################## Session State Code ##############################################
-
-if 'message_history' not in st.session_state:
+def reset_chat():
+    thread_id = generate_thread_id()
+    st.session_state['thread_id'] = thread_id
+    add_thread(thread_id)
     st.session_state['message_history'] = []
 
-if "thread_id" not in st.session_state :
-    st.session_state['thread_id'] = generate_thread_id()
+    # # Initialize empty thread in DB so it appears in history
+    # workflow.invoke(
+    # {"messages": [HumanMessage(content=user_input), AIMessage(content=full_response)]},
+    # config={"configurable": {"thread_id": st.session_state['thread_id']}}
+    # )
 
-if 'chat_threads' not in st.session_state:
-    st.session_state['chat_threads'] = find_all_thread()
-    
-add_thread(st.session_state['thread_id'])
+def chat_within_thread_id(thread_id):
+    """Get messages stored in DB for a given thread"""
+    state = workflow.get_state(config={"configurable": {"thread_id": thread_id}})
+    return state.values.get("messages")
 
-######################################## Agent Mode Code ###############################################
-if 'agent_mode' not in st.session_state:
-    st.session_state['agent_mode'] = False
+def load_thread_messages(thread_id):
+    """Format messages from DB for Streamlit display"""
+    load_chat = chat_within_thread_id(thread_id)
+    temp_messages = []
+    if load_chat:
+        for messag in load_chat:
+            if isinstance(messag, HumanMessage):
+                role = "user"
+            elif isinstance(messag, AIMessage):
+                role = "assistant"
+            else:
+                continue
+            temp_messages.append({"role": role, "content": messag.content})
+    return temp_messages
 
+######################################## Session State ########################################
+if "message_history" not in st.session_state:
+    st.session_state["message_history"] = []
 
-######################################## Side-Bar Code #################################################
+if "thread_id" not in st.session_state:
+    st.session_state["thread_id"] = generate_thread_id()
+
+if "chat_threads" not in st.session_state:
+    st.session_state["chat_threads"] = find_all_thread()
+
+add_thread(st.session_state["thread_id"])
+
+if "agent_mode" not in st.session_state:
+    st.session_state["agent_mode"] = False
+
+######################################## Side-Bar ########################################
 st.sidebar.title("Lang Graph ChatBot")
 if st.sidebar.button("New Chat"):
     reset_chat()
+
 st.sidebar.header("Your History")
-
-for thread_id in st.session_state['chat_threads']:
-    
+for thread_id in st.session_state["chat_threads"]:
     load_chat = chat_within_thread_id(thread_id)
+    display_title = load_chat[0].content[:20] if load_chat else "empty chat"
 
-    if load_chat :
-        displsy_title = load_chat[0].content[:20]
-    else :
-        displsy_title = "empty chat" 
+    if st.sidebar.button(display_title, key=f"btn-{thread_id}"):
+        st.session_state["thread_id"] = thread_id
+        st.session_state["message_history"] = load_thread_messages(thread_id)
 
-    # print("Thread_idd", thread_id)
-    if st.sidebar.button(displsy_title ,  key=f"btn-{thread_id}"):
-        st.session_state['thread_id'] = thread_id
-        # print("after click thread_id --->>" ,  )
-        
-        ##convert into compatiblity
-        temp_messages = []
-        # print("------------>>>>>>>>>>>>>",load_chat)
-        for messag in load_chat:
-            if isinstance(messag , HumanMessage):
-                role = "user"
-            elif isinstance(messag , AIMessage ):
-                role = "assistant"
-            # else:
-            #     role = []
+######################################## Display Chat ########################################
+for message in st.session_state["message_history"]:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-            temp_messages.append({
-                'role' : role,
-                'content' : messag.content
-            })
+user_input = st.chat_input("Type here")
 
-        st.session_state['message_history'] = temp_messages
-    
-######################################## Display the chat-history ##############################################
-for message in st.session_state['message_history']:
-    with st.chat_message(message['role']):
-        st.markdown(message['content'])
- 
-
-
-user_input = st.chat_input('Type here')
-
-agent_cmd = {
-    "agent_mode_on": [
-        "nexi agent on",
-        "nexi agent on."
-        "agent mode on",
-        "agent On",
-        "turn agent mode on",
-        "enable agent mode",
-        "activate agent mode",
-        "start agent mode",
-        "agent"
-    ],
-    "agent_mode_off": [
-        "nexi agent off",
-        "nexi agent off."
-        "agent mode off",
-        "agent Off",
-        "turn agent mode off",
-        "disable agent mode",
-        "deactivate agent mode",
-        "stop agent mode",
-        "no agent"
-    ]
-    }
-
+######################################## Streaming Response ########################################
 if user_input:
-    user_text = user_input.strip().lower()
-    # print(user_text)
+    # Add user input to history
+    st.session_state["message_history"].append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    # Add user's message to history
-    st.session_state['message_history'].append({'role': 'user', 'content': user_input})
-    with st.chat_message('user'):
-        st.text(user_input)
+    # Prepare messages for backend
+    api_messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state["message_history"]]
 
-    
-    if user_text in agent_cmd['agent_mode_on'] : 
-        st.session_state['agent_mode'] = True
-        ai_message = "✅ Agent Mode is now **ON**. I can execute commands."
-        st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
-
-        with st.chat_message('assistant'):
-            st.markdown(ai_message)
-        st.stop()
-
-    elif user_text in agent_cmd['agent_mode_off']:
-        st.session_state['agent_mode'] = False
-        ai_message = "❌ Agent Mode is now **OFF**. I'll only chat."
-        st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
-        with st.chat_message('assistant'):
-            st.markdown(ai_message)
-        st.stop()
-
-    # --- Handle commands if Agent Mode is ON ---
-    if st.session_state['agent_mode'] and handle_local_commands(user_text):
-        ai_message = f"🛠 Executed command: {user_input}"
-        st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
-        with st.chat_message('assistant'):
-            st.markdown(ai_message)
-        st.stop()
-
-    ##streamiing 
-    # ---  AI response (with streaming) ---
-    config = {"configurable": {"thread_id": st.session_state['thread_id']}}
-
-    try: 
-        # Stream response instead of full invoke
-        response_stream = workflow.stream({'messages': [HumanMessage(content=user_input)]}, config=config)
-        # print(response_stream)
-    except:
-        raise Exception("No Connections Or API error")
-
-    # Placeholder in chat to update incrementally
-    with st.chat_message('assistant'):
+    # Stream assistant response
+    with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
+        for chunk in gpt_models_streaming(api_messages):
+            full_response += chunk
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
 
-        # Stream tokens as they arrive
-        for event in response_stream:
-            # print("-->" , event.values())
-            for value in event.values():
-                # print("->",value)  
-                if hasattr(value, "content"):
-                    token = value.content
-                    full_response += token
-                    message_placeholder.markdown(full_response + "▌")
+    # Save assistant response in session + DB
+    st.session_state["message_history"].append({"role": "assistant", "content": full_response})
 
-              
-                elif isinstance(value, dict):
-                    if "messages" in value:
-                        for msg in value["messages"]:
-                            if hasattr(msg, "content"):
-                                token = msg.content
-                                full_response += token
-                                # print(full_response)
-                                message_placeholder.markdown(full_response + "▌")
-                # Final update (remove typing cursor ▌)
-                # message_placeholder.markdown(full_response)
-
-    # Save to session history
-    st.session_state['message_history'].append({'role': 'assistant', 'content': full_response})
-
-    
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    # # --- Normal AI response ---
-    # config = {"configurable": {"thread_id": thread_id}}
-    # try:
-    #     response = workflow.invoke({'messages': [HumanMessage(content=user_input)]}, config=config)
-    #     # print(response)
-    # except:
-    #     raise Exception("No Connections Or API error")
-    # # ##for the streaming
-    # ai_message = response['messages'][-1].content
-
-    # st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
-
-    # with st.chat_message('assistant'):
-    #     st.markdown(ai_message)
+    workflow.invoke(
+        {"messages": [
+            HumanMessage(content=user_input),
+            AIMessage(content=full_response)
+        ]},
+        config={"configurable": {"thread_id": st.session_state['thread_id']}}
+    )
